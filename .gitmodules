@@ -1,0 +1,24 @@
+[submodule "dependencies/MqttDaemon"]
+	path = dependencies/MqttDaemon
+	url = https://github.com/FragJage/MqttDaemon
+[submodule "dependencies/ServiceSkeleton"]
+	path = dependencies/ServiceSkeleton
+	url = https://github.com/FragJage/ServiceSkeleton
+[submodule "dependencies/SimpleFolder"]
+	path = dependencies/SimpleFolder
+	url = https://github.com/FragJage/SimpleFolder
+[submodule "dependencies/SimpleIni"]
+	path = dependencies/SimpleIni
+	url = https://github.com/FragJage/SimpleIni
+[submodule "dependencies/SimpleLog"]
+	path = dependencies/SimpleLog
+	url = https://github.com/FragJage/SimpleLog
+[submodule "dependencies/FragFramework"]
+	path = dependencies/FragFramework
+	url = https://github.com/FragJage/FragFramework
+[submodule "dependencies/jsoncpp"]
+	path = dependencies/jsoncpp
+	url = https://github.com/open-source-parsers/jsoncpp
+[submodule "dependencies/cpr"]
+	path = dependencies/cpr
+	url = https://github.com/whoshuu/cpr

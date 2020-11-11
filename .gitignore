@@ -1,6 +1,3 @@
-# Prerequisites
-*.d
-
 # Compiled Object files
 *.slo
 *.lo
@@ -16,9 +13,6 @@
 *.dylib
 *.dll
 
-# Fortran module files
-*.mod
-*.smod
 
 # Compiled Static libraries
 *.lai
@@ -30,3 +24,15 @@
 *.exe
 *.out
 *.app
+bin
+
+# Codeblocks
+*.depend
+*.layout
+
+# CMake
+CMakeCache.txt
+CMakeFiles
+Makefile
+cmake_install.cmake
+install_manifest.txt
