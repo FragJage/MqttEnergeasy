@@ -25,6 +25,7 @@ class MqttEnergeasy : public MqttDaemon
 
     private:
         void MessageForService(const std::string& msg);
+        void MessageForDevice(const std::string& device, const std::string& msg);
         void SendMqttMessages();
         void PollEvents();
         bool IsEndEvent(const Json::Value& root, const std::string& execId);

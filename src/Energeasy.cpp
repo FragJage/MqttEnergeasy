@@ -45,9 +45,9 @@ cpr::Response Energeasy::CprGet(const string& route, bool retry)
                             m_VerifySsl,
                             m_Proxies);
 
-    if((retry)&&(rp.status_code>=400)&&(rp.status_code<=403))
+    if((retry)&&(rp.status_code==411))
     {
-        if(Connect()) CprGet(route, false);
+        if(Connect()) rp = CprGet(route, false);
     }
 
     return rp;
@@ -64,9 +64,9 @@ cpr::Response Energeasy::CprPost(const string& route, const string& body, bool r
                             m_VerifySsl,
                             m_Proxies);
 
-    if((retry)&&(rp.status_code>=400)&&(rp.status_code<=403))
+    if((retry)&&(rp.status_code==411))
     {
-        if(Connect()) CprPost(route, body, false);
+        if(Connect()) rp = CprPost(route, body, false);
     }
 
     return rp;
@@ -351,6 +351,44 @@ Json::Value Energeasy::GetEvents()
     {
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
         return false;
+    }
+
+    LOG_DEBUG(m_Log) << "*** Exit OK ***";
+    return root;
+}
+
+Json::Value Energeasy::GetStates(const string& deviceLabel)
+{
+    Json::Value root;
+    LOG_DEBUG(m_Log) << "*** Enter ***";
+
+    if(!RefreshSetup(false))
+    {
+        LOG_DEBUG(m_Log) << "*** Exit KO ***";
+        return root;
+    }
+
+    Json::Value device = FindDevice(deviceLabel);
+    if(device.empty())
+    {
+        LOG_INFO(m_Log) << "Device '" << deviceLabel << "' not found.";
+        LOG_DEBUG(m_Log) << "*** Exit KO ***";
+        return root;
+    }
+
+    string deviceUrl = cpr::util::urlEncode(device["deviceURL"].asString());
+    cpr::Response rp = CprGet("/api/enduser-mobile-web/enduserAPI/setup/devices/"+deviceUrl+"/states");
+
+    if(!CheckResponse(rp))
+    {
+        LOG_DEBUG(m_Log) << "*** Exit KO ***";
+        return root;
+    }
+
+    if(!ParseResponse(rp, &root))
+    {
+        LOG_DEBUG(m_Log) << "*** Exit KO ***";
+        return root;
     }
 
     LOG_DEBUG(m_Log) << "*** Exit OK ***";

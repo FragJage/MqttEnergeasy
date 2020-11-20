@@ -23,6 +23,7 @@ class Energeasy
         //std::string GetCommands(const std::string& deviceLabel);
         //std::string GetStates(const std::string& deviceLabel);
         Json::Value GetEvents();
+        Json::Value GetStates(const std::string& deviceLabel);
         std::string SendCommand(const std::string& deviceLabel, const std::string& jsonCommand);
         std::string GetDeviceLabel(const std::string& deviceUrl);
 

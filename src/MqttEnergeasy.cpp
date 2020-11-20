@@ -58,6 +58,24 @@ void MqttEnergeasy::DaemonConfigure(SimpleIni& iniFile)
 	LOG_EXIT_OK;
 }
 
+void MqttEnergeasy::MessageForDevice(const std::string& deviceLabel, const std::string& msg)
+{
+    if(msg=="REFRESH")
+    {
+        Json::Value states = m_Energeasy.GetStates(deviceLabel);
+        SendStates(deviceLabel, states);
+        return;
+    }
+
+	string execId = m_Energeasy.SendCommand(deviceLabel, msg);
+	if(execId!="")
+    {
+        m_LastExecId = execId;
+        m_PollInterval = 1;
+        m_PollLoopCount = 0;
+    }
+}
+
 void MqttEnergeasy::MessageForService(const string& msg)
 {
 	if (msg == "GETDEVICES")
@@ -99,13 +117,7 @@ void MqttEnergeasy::on_message(const string& topic, const string& message)
     }
 
 	string device = topic.substr(mainTopic.length() + 8);
-	string execId = m_Energeasy.SendCommand(device, message);
-	if(execId!="")
-    {
-        m_LastExecId = execId;
-        m_PollInterval = 1;
-        m_PollLoopCount = 0;
-    }
+	MessageForDevice(topic, message);
 	return;
 }
 
