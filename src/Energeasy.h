@@ -22,7 +22,9 @@ class Energeasy
         std::string GetDevices();
         //std::string GetCommands(const std::string& deviceLabel);
         //std::string GetStates(const std::string& deviceLabel);
-        void SendCommand(const std::string& deviceLabel, const std::string& jsonCommand);
+        Json::Value GetEvents();
+        std::string SendCommand(const std::string& deviceLabel, const std::string& jsonCommand);
+        std::string GetDeviceLabel(const std::string& deviceUrl);
 
     protected:
 
@@ -33,11 +35,14 @@ class Energeasy
         bool CheckResponse(const cpr::Response& rp);
         bool ParseResponse(const cpr::Response& rp, Json::Value* root);
         bool RefreshSetup(bool forceRead);
+        bool RegisterEvents();
+        void UnregisterEvents();
         const Json::Value&  FindDevice(const std::string& deviceLabel);
         bool m_Connected;
         std::string m_Url;
         std::string m_User;
         std::string m_Password;
+        std::string m_RegisterEventId;
         cpr::Cookies m_Cookies;
         cpr::VerifySsl m_VerifySsl;
         cpr::Proxies m_Proxies;

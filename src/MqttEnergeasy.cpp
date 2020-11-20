@@ -2,11 +2,11 @@
 #include <algorithm>
 #include "StringTools.h"
 #include "MqttEnergeasy.h"
-
+#include "json/json.h"
 
 using namespace std;
 
-MqttEnergeasy::MqttEnergeasy() : MqttDaemon("energeasy", "MqttEnergeasy"), m_Energeasy(m_Log)
+MqttEnergeasy::MqttEnergeasy() : MqttDaemon("energeasy", "MqttEnergeasy"), m_Energeasy(m_Log), m_DefaultPollInterval(600), m_PollInterval(m_DefaultPollInterval)
 {
 }
 
@@ -99,12 +99,100 @@ void MqttEnergeasy::on_message(const string& topic, const string& message)
     }
 
 	string device = topic.substr(mainTopic.length() + 8);
-	m_Energeasy.SendCommand(device, message);
+	string execId = m_Energeasy.SendCommand(device, message);
+	if(execId!="")
+    {
+        m_LastExecId = execId;
+        m_PollInterval = 1;
+        m_PollLoopCount = 0;
+    }
 	return;
+}
+
+void MqttEnergeasy::SendStates(const std::string& deviceLabel, const Json::Value& states)
+{
+    string name;
+    size_t pos;
+
+    lock_guard<mutex> lock(m_MqttQueueAccess);
+
+    for(const Json::Value& state : states)
+    {
+        if(!state.isMember("name")) continue;
+        if(!state.isMember("value")) continue;
+
+        name = state["name"].asString();
+        pos = name.find(":");
+        if(pos != string::npos) name = name.substr(pos+1);
+        m_MqttQueue.emplace(deviceLabel+"/"+name, state["value"].asString());
+    }
+}
+
+void MqttEnergeasy::SendEventsStates(const Json::Value& events)
+{
+    string label;
+
+    for(const Json::Value& event : events)
+    {
+        if(!event.isMember("deviceURL")) continue;
+        if(!event.isMember("deviceStates")) continue;
+        label = m_Energeasy.GetDeviceLabel(event["deviceURL"].asString());
+        LOG_VERBOSE(m_Log) << "Found event states for " << label;
+        if(label!="") SendStates(label, event["deviceStates"]);
+    }
+}
+
+bool MqttEnergeasy::IsEndEvent(const Json::Value& events, const string& execId)
+{
+    string state;
+
+    for(const Json::Value& event : events)
+    {
+        if(!event.isMember("execId")) continue;
+        if(event["execId"].asString() != execId) continue;
+        if(!event.isMember("newState")) continue;
+        state = event["newState"].asString();
+        if((state=="FAILED")||(state=="COMPLETED")) return true;
+    }
+    return false;
+}
+
+void MqttEnergeasy::PollEvents()
+{
+    time_t timeNow = time((time_t*)0);
+    static time_t lastPoll = timeNow;
+
+	if(timeNow-lastPoll<m_PollInterval) return;
+    lastPoll = timeNow;
+
+	LOG_ENTER;
+    Json::Value root = m_Energeasy.GetEvents();
+   	LOG_TRACE(m_Log) << "Received events " << root;
+    SendEventsStates(root);
+    if(IsEndEvent(root, m_LastExecId))
+    {
+        LOG_VERBOSE(m_Log) << "Found end execution of " << m_LastExecId;
+        m_LastExecId = "";
+        m_PollInterval = m_DefaultPollInterval;
+    }
+
+    if(m_LastExecId != "")
+    {
+        m_PollLoopCount++;
+        if(m_PollLoopCount>29) m_PollInterval = 2;
+        if(m_PollLoopCount>60)
+        {
+            m_LastExecId = "";
+            m_PollInterval = m_DefaultPollInterval;
+        }
+    }
+	LOG_VERBOSE(m_Log) << "Pool interval " << m_PollInterval << "s";
+  	LOG_EXIT_OK;
 }
 
 int MqttEnergeasy::DaemonLoop(int argc, char* argv[])
 {
+
 	LOG_ENTER;
 
 	Subscribe(GetMainTopic() + "command/#");
@@ -132,6 +220,7 @@ int MqttEnergeasy::DaemonLoop(int argc, char* argv[])
 		}
 		if (!m_bPause)
 		{
+		    PollEvents();
 			SendMqttMessages();
 		}
     }

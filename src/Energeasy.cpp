@@ -8,6 +8,7 @@ Energeasy::Energeasy(SimpleLog* log) : m_Connected(false), m_Url("https://api.en
 
 Energeasy::~Energeasy()
 {
+    if(m_RegisterEventId != "") UnregisterEvents();
     Disconnect();
 }
 
@@ -145,7 +146,10 @@ void Energeasy::Disconnect()
 bool Energeasy::RefreshSetup(bool forceRead)
 {
     if((!m_Setup.empty())&&(!forceRead)) return true;
-    if(!m_Connected) Connect();
+    if(!m_Connected)
+    {
+        if(!Connect()) return false;
+    }
 
     cpr::Response rp = CprGet("/api/enduser-mobile-web/enduserAPI/setup");
     if(!CheckResponse(rp))
@@ -163,7 +167,31 @@ bool Energeasy::RefreshSetup(bool forceRead)
     return true;
 }
 
-const Json::Value&  Energeasy::FindDevice(const string& deviceLabel)
+string Energeasy::GetDeviceLabel(const string& deviceUrl)
+{
+    string label = "";
+
+    LOG_DEBUG(m_Log) << "*** Enter ***";
+    if(!RefreshSetup(true))
+    {
+        LOG_DEBUG(m_Log) << "*** Exit KO ***";
+        return "";
+    }
+
+    for(const Json::Value& deviceSetup : m_Setup["devices"])
+    {
+        if(deviceSetup["deviceURL"].asString() == deviceUrl)
+        {
+            label = deviceSetup["label"].asString();
+            break;
+        }
+    }
+
+    LOG_DEBUG(m_Log) << "*** Exit OK ***";
+    return label;
+}
+
+const Json::Value& Energeasy::FindDevice(const string& deviceLabel)
 {
     for(const Json::Value& deviceSetup : m_Setup["devices"])
     {
@@ -242,14 +270,101 @@ string Energeasy::GetStates(const string& deviceLabel)
 }
 */
 
-void Energeasy::SendCommand(const string& deviceLabel, const string& jsonCommand)
+bool Energeasy::RegisterEvents()
+{
+    LOG_DEBUG(m_Log) << "*** Enter ***";
+    if(m_RegisterEventId != "") UnregisterEvents();
+
+    Json::Value body;
+    Json::StreamWriterBuilder builder;
+    body["action"] = true;
+
+    cpr::Response rp = CprPost("/api/enduser-mobile-web/enduserAPI/events/register", "", true);
+    if(!CheckResponse(rp))
+    {
+        LOG_DEBUG(m_Log) << "*** Exit KO ***";
+        return false;
+    }
+
+    Json::Value root;
+    if(!ParseResponse(rp, &root))
+    {
+        LOG_DEBUG(m_Log) << "*** Exit KO ***";
+        return false;
+    }
+
+    m_RegisterEventId = root["id"].asString();
+
+    LOG_DEBUG(m_Log) << "*** Exit OK ***";
+    return true;
+}
+
+void Energeasy::UnregisterEvents()
+{
+    LOG_DEBUG(m_Log) << "*** Enter ***";
+
+    if(m_RegisterEventId == "")
+    {
+        LOG_DEBUG(m_Log) << "*** Exit OK ***";
+        return;
+    }
+
+    CprPost("/api/enduser-mobile-web/enduserAPI/events/"+m_RegisterEventId+"/unregister", "", false);
+
+    m_RegisterEventId = "";
+    LOG_DEBUG(m_Log) << "*** Exit OK ***";
+}
+
+Json::Value Energeasy::GetEvents()
+{
+    LOG_DEBUG(m_Log) << "*** Enter ***";
+    Json::Value root;
+
+    if(!m_Connected)
+    {
+        if(!Connect())
+        {
+            LOG_ERROR(m_Log) << "Unable to connect.";
+            LOG_DEBUG(m_Log) << "*** Exit KO ***";
+            return root;
+        }
+    }
+
+    if(m_RegisterEventId == "")
+    {
+        if(!RegisterEvents())
+        {
+            LOG_ERROR(m_Log) << "Unable to get register event id.";
+            LOG_DEBUG(m_Log) << "*** Exit KO ***";
+            return root;
+        }
+    }
+
+    cpr::Response rp = CprPost("/api/enduser-mobile-web/enduserAPI/events/"+m_RegisterEventId+"/fetch", "", true);
+    if(!CheckResponse(rp))
+    {
+        LOG_DEBUG(m_Log) << "*** Exit KO ***";
+        return root;
+    }
+
+    if(!ParseResponse(rp, &root))
+    {
+        LOG_DEBUG(m_Log) << "*** Exit KO ***";
+        return false;
+    }
+
+    LOG_DEBUG(m_Log) << "*** Exit OK ***";
+    return root;
+}
+
+string Energeasy::SendCommand(const string& deviceLabel, const string& jsonCommand)
 {
     LOG_DEBUG(m_Log) << "*** Enter ***";
 
     if(!RefreshSetup(false))
     {
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
-        return;
+        return "";
     }
 
     Json::Value device = FindDevice(deviceLabel);
@@ -257,7 +372,7 @@ void Energeasy::SendCommand(const string& deviceLabel, const string& jsonCommand
     {
         LOG_INFO(m_Log) << "Device '" << deviceLabel << "' not found.";
         LOG_DEBUG(m_Log) << "*** Exit OK ***";
-        return;
+        return "";
     }
 
     Json::Value body, actions, action, commands, command;
@@ -271,7 +386,7 @@ void Energeasy::SendCommand(const string& deviceLabel, const string& jsonCommand
         LOG_ERROR(m_Log) << "Failed to parse " << jsonCommand;
         LOG_ERROR(m_Log) << "Parse error : " << errorMsg;
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
-        return;
+        return "";
     }
     commands.append(command);
 
@@ -288,17 +403,17 @@ void Energeasy::SendCommand(const string& deviceLabel, const string& jsonCommand
     if(!CheckResponse(rp))
     {
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
-        return;
+        return "";
     }
 
     Json::Value root;
     if(!ParseResponse(rp, &root))
     {
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
-        return;
+        return "";
     }
-    LOG_VERBOSE(m_Log) << root;
     LOG_DEBUG(m_Log) << "*** Exit OK ***";
+    return root["execId"].asString();
 }
 
 string Energeasy::BuildUrl(const string& route)
