@@ -8,7 +8,7 @@ Energeasy::Energeasy(SimpleLog* log) : m_Connected(false), m_Url("https://api.en
 
 Energeasy::~Energeasy()
 {
-    if(m_RegisterEventId != "") UnregisterEvents();
+    if(m_RegisterEventId != "") PollStop();
     Disconnect();
 }
 
@@ -164,6 +164,7 @@ bool Energeasy::RefreshSetup(bool forceRead)
         return false;
     }
 
+    m_SetupRead = time((time_t*)0);
     return true;
 }
 
@@ -189,6 +190,26 @@ string Energeasy::GetDeviceLabel(const string& deviceUrl)
 
     LOG_DEBUG(m_Log) << "*** Exit OK ***";
     return label;
+}
+
+set<string> Energeasy::GetDevicesLabel()
+{
+    set<string> labels;
+
+    LOG_DEBUG(m_Log) << "*** Enter ***";
+    if(!RefreshSetup(true))
+    {
+        LOG_DEBUG(m_Log) << "*** Exit KO ***";
+        return labels;
+    }
+
+    for(const Json::Value& deviceSetup : m_Setup["devices"])
+    {
+        labels.insert(deviceSetup["label"].asString());
+    }
+
+    LOG_DEBUG(m_Log) << "*** Exit OK ***";
+    return labels;
 }
 
 const Json::Value& Energeasy::FindDevice(const string& deviceLabel)
@@ -270,10 +291,10 @@ string Energeasy::GetStates(const string& deviceLabel)
 }
 */
 
-bool Energeasy::RegisterEvents()
+bool Energeasy::PollStart()
 {
     LOG_DEBUG(m_Log) << "*** Enter ***";
-    if(m_RegisterEventId != "") UnregisterEvents();
+    if(m_RegisterEventId != "") PollStop();
 
     Json::Value body;
     Json::StreamWriterBuilder builder;
@@ -299,7 +320,7 @@ bool Energeasy::RegisterEvents()
     return true;
 }
 
-void Energeasy::UnregisterEvents()
+void Energeasy::PollStop()
 {
     LOG_DEBUG(m_Log) << "*** Enter ***";
 
@@ -315,7 +336,7 @@ void Energeasy::UnregisterEvents()
     LOG_DEBUG(m_Log) << "*** Exit OK ***";
 }
 
-Json::Value Energeasy::GetEvents()
+Json::Value Energeasy::PollEvents()
 {
     LOG_DEBUG(m_Log) << "*** Enter ***";
     Json::Value root;
@@ -332,7 +353,7 @@ Json::Value Energeasy::GetEvents()
 
     if(m_RegisterEventId == "")
     {
-        if(!RegisterEvents())
+        if(!PollStart())
         {
             LOG_ERROR(m_Log) << "Unable to get register event id.";
             LOG_DEBUG(m_Log) << "*** Exit KO ***";
@@ -361,6 +382,7 @@ Json::Value Energeasy::GetStates(const string& deviceLabel)
 {
     Json::Value root;
     LOG_DEBUG(m_Log) << "*** Enter ***";
+    LOG_VERBOSE(m_Log) << "Get states of "<< deviceLabel;
 
     if(!RefreshSetup(false))
     {
@@ -374,6 +396,14 @@ Json::Value Energeasy::GetStates(const string& deviceLabel)
         LOG_INFO(m_Log) << "Device '" << deviceLabel << "' not found.";
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
         return root;
+    }
+
+    time_t timeNow = time((time_t*)0);
+    if(timeNow-m_SetupRead<10)
+    {
+        LOG_VERBOSE(m_Log) << "Return cached states";
+        LOG_DEBUG(m_Log) << "*** Exit OK ***";
+        return device["states"];
     }
 
     string deviceUrl = cpr::util::urlEncode(device["deviceURL"].asString());

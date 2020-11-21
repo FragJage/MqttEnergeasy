@@ -6,7 +6,7 @@
 
 using namespace std;
 
-MqttEnergeasy::MqttEnergeasy() : MqttDaemon("energeasy", "MqttEnergeasy"), m_Energeasy(m_Log), m_DefaultPollInterval(600), m_PollInterval(m_DefaultPollInterval)
+MqttEnergeasy::MqttEnergeasy() : MqttDaemon("energeasy", "MqttEnergeasy"), m_Energeasy(m_Log), m_StatesInterval(600)
 {
 }
 
@@ -70,9 +70,12 @@ void MqttEnergeasy::MessageForDevice(const std::string& deviceLabel, const std::
 	string execId = m_Energeasy.SendCommand(deviceLabel, msg);
 	if(execId!="")
     {
-        m_LastExecId = execId;
-        m_PollInterval = 1;
-        m_PollLoopCount = 0;
+        if(m_Energeasy.PollStart())
+        {
+            m_LastExecId = execId;
+            m_PollInterval = 1;
+            m_PollLoopCount = 0;
+        }
     }
 }
 
@@ -178,27 +181,49 @@ void MqttEnergeasy::PollEvents()
     lastPoll = timeNow;
 
 	LOG_ENTER;
-    Json::Value root = m_Energeasy.GetEvents();
+    Json::Value root = m_Energeasy.PollEvents();
    	LOG_TRACE(m_Log) << "Received events " << root;
     SendEventsStates(root);
     if(IsEndEvent(root, m_LastExecId))
     {
         LOG_VERBOSE(m_Log) << "Found end execution of " << m_LastExecId;
         m_LastExecId = "";
-        m_PollInterval = m_DefaultPollInterval;
+        LOG_EXIT_OK;
+        return;
+    }
+    m_PollLoopCount++;
+    if(m_PollLoopCount>29)
+    {
+        m_PollInterval = 2;
+        LOG_VERBOSE(m_Log) << "Poll interval set to " << m_PollInterval << "s.";
+    }
+    if(m_PollLoopCount>60)
+    {
+        m_LastExecId = "";
+        LOG_VERBOSE(m_Log) << "Forced stop polling !";
+    }
+  	LOG_EXIT_OK;
+}
+
+void MqttEnergeasy::GetStates()
+{
+    time_t timeNow = time((time_t*)0);
+    static time_t lastPoll = timeNow-m_StatesInterval;
+
+	if(timeNow-lastPoll<m_StatesInterval) return;
+    lastPoll = timeNow;
+
+	LOG_ENTER;
+
+	set<string> labels = m_Energeasy.GetDevicesLabel();
+	for(const string& deviceLabel : labels)
+    {
+        if(deviceLabel.find("#") != string::npos) continue;
+        if(deviceLabel.find("+") != string::npos) continue;
+        Json::Value states = m_Energeasy.GetStates(deviceLabel);
+        SendStates(deviceLabel, states);
     }
 
-    if(m_LastExecId != "")
-    {
-        m_PollLoopCount++;
-        if(m_PollLoopCount>29) m_PollInterval = 2;
-        if(m_PollLoopCount>60)
-        {
-            m_LastExecId = "";
-            m_PollInterval = m_DefaultPollInterval;
-        }
-    }
-	LOG_VERBOSE(m_Log) << "Pool interval " << m_PollInterval << "s";
   	LOG_EXIT_OK;
 }
 
@@ -232,7 +257,8 @@ int MqttEnergeasy::DaemonLoop(int argc, char* argv[])
 		}
 		if (!m_bPause)
 		{
-		    PollEvents();
+		    if(m_LastExecId!="") PollEvents();
+		    GetStates();
 			SendMqttMessages();
 		}
     }

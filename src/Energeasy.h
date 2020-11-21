@@ -2,7 +2,7 @@
 #define ENERGEASY_H
 
 #include <string>
-#include <list>
+#include <set>
 #include "SimpleLog.h"
 #include "cpr/cpr.h"
 #include "json/json.h"
@@ -22,10 +22,13 @@ class Energeasy
         std::string GetDevices();
         //std::string GetCommands(const std::string& deviceLabel);
         //std::string GetStates(const std::string& deviceLabel);
-        Json::Value GetEvents();
         Json::Value GetStates(const std::string& deviceLabel);
         std::string SendCommand(const std::string& deviceLabel, const std::string& jsonCommand);
         std::string GetDeviceLabel(const std::string& deviceUrl);
+        std::set<std::string> GetDevicesLabel();
+        bool PollStart();
+        void PollStop();
+        Json::Value PollEvents();
 
     protected:
 
@@ -47,6 +50,7 @@ class Energeasy
         cpr::Cookies m_Cookies;
         cpr::VerifySsl m_VerifySsl;
         cpr::Proxies m_Proxies;
+        time_t m_SetupRead;
         Json::Value m_Setup;
         SimpleLog* m_Log;
         Json::Value m_StaticEmptyValue;
