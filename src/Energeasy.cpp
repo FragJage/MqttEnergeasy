@@ -173,7 +173,7 @@ string Energeasy::GetDeviceLabel(const string& deviceUrl)
     string label = "";
 
     LOG_DEBUG(m_Log) << "*** Enter ***";
-    if(!RefreshSetup(true))
+    if(!RefreshSetup(false))
     {
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
         return "";
@@ -197,7 +197,7 @@ set<string> Energeasy::GetDevicesLabel()
     set<string> labels;
 
     LOG_DEBUG(m_Log) << "*** Enter ***";
-    if(!RefreshSetup(true))
+    if(!RefreshSetup(false))
     {
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
         return labels;
@@ -227,7 +227,7 @@ string Energeasy::GetDevices()
     Json::StreamWriterBuilder wbuilder;
 
     LOG_DEBUG(m_Log) << "*** Enter ***";
-    if(!RefreshSetup(true))
+    if(!RefreshSetup(false))
     {
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
         return "";
