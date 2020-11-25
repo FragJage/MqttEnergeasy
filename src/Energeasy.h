@@ -19,13 +19,12 @@ class Energeasy
         void SetVerifSsl(bool active);
         bool Connect();
         void Disconnect();
-        std::string GetDevices();
-        //std::string GetCommands(const std::string& deviceLabel);
-        //std::string GetStates(const std::string& deviceLabel);
-        Json::Value GetStates(const std::string& deviceLabel);
-        std::string SendCommand(const std::string& deviceLabel, const std::string& jsonCommand);
-        std::string GetDeviceLabel(const std::string& deviceUrl);
-        std::set<std::string> GetDevicesLabel();
+        Json::Value GetDevices();
+        std::set<std::string> GetDevicesUrl();
+        Json::Value GetStates(const std::string& deviceUrl);
+        std::string SendCommand(const std::string& deviceUrl, const std::string& jsonCommand);
+        std::string GetDeviceUrlFromLabel(const std::string& deviceLabel);
+        std::string GetDeviceLabelFromUrl(const std::string& deviceUrl);
         bool PollStart();
         void PollStop();
         Json::Value PollEvents();
@@ -36,12 +35,13 @@ class Energeasy
         std::string BuildUrl(const std::string& route);
         cpr::Response CprGet(const std::string& route, bool retry=true);
         cpr::Response CprPost(const std::string& route, const std::string& body, bool retry=true);
+        const Json::Value& FindCachedDevice(const std::string& deviceUrl);
         bool CheckResponse(const cpr::Response& rp);
         bool ParseResponse(const cpr::Response& rp, Json::Value* root);
         bool RefreshSetup(bool forceRead);
         bool RegisterEvents();
         void UnregisterEvents();
-        const Json::Value&  FindDevice(const std::string& deviceLabel);
+
         bool m_Connected;
         std::string m_Url;
         std::string m_User;

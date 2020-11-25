@@ -41,11 +41,12 @@ cpr::Response Energeasy::CprGet(const string& route, bool retry)
     LOG_VERBOSE(m_Log) << "GET " << route;
     cpr::Response rp = cpr::Get(
                             cpr::Url{BuildUrl(route)},
+                            cpr::Header{{"Content-Type", "application/json;charset=UTF-8"}},
                             m_Cookies,
                             m_VerifySsl,
                             m_Proxies);
 
-    if((retry)&&(rp.status_code==411))
+    if((retry)&&((rp.status_code==400)||(rp.status_code==411)))
     {
         if(Connect()) rp = CprGet(route, false);
     }
@@ -59,12 +60,12 @@ cpr::Response Energeasy::CprPost(const string& route, const string& body, bool r
     cpr::Response rp = cpr::Post(
                             cpr::Url{BuildUrl(route)},
                             cpr::Body{body},
-                            cpr::Header{{"Content-Type", "application/json"}},
+                            cpr::Header{{"Content-Type", "application/json;charset=UTF-8"}},
                             m_Cookies,
                             m_VerifySsl,
                             m_Proxies);
 
-    if((retry)&&(rp.status_code==411))
+    if((retry)&&((rp.status_code==400)||(rp.status_code==411)))
     {
         if(Connect()) rp = CprPost(route, body, false);
     }
@@ -168,10 +169,8 @@ bool Energeasy::RefreshSetup(bool forceRead)
     return true;
 }
 
-string Energeasy::GetDeviceLabel(const string& deviceUrl)
+string Energeasy::GetDeviceUrlFromLabel(const string& deviceLabel)
 {
-    string label = "";
-
     LOG_DEBUG(m_Log) << "*** Enter ***";
     if(!RefreshSetup(false))
     {
@@ -179,53 +178,23 @@ string Energeasy::GetDeviceLabel(const string& deviceUrl)
         return "";
     }
 
+    string deviceUrl = "";
+
     for(const Json::Value& deviceSetup : m_Setup["devices"])
     {
-        if(deviceSetup["deviceURL"].asString() == deviceUrl)
+        if(deviceSetup["label"].asString() == deviceLabel)
         {
-            label = deviceSetup["label"].asString();
+            deviceUrl = deviceSetup["deviceURL"].asString();
             break;
         }
     }
 
     LOG_DEBUG(m_Log) << "*** Exit OK ***";
-    return label;
+    return deviceUrl;
 }
 
-set<string> Energeasy::GetDevicesLabel()
+string Energeasy::GetDeviceLabelFromUrl(const string& deviceUrl)
 {
-    set<string> labels;
-
-    LOG_DEBUG(m_Log) << "*** Enter ***";
-    if(!RefreshSetup(false))
-    {
-        LOG_DEBUG(m_Log) << "*** Exit KO ***";
-        return labels;
-    }
-
-    for(const Json::Value& deviceSetup : m_Setup["devices"])
-    {
-        labels.insert(deviceSetup["label"].asString());
-    }
-
-    LOG_DEBUG(m_Log) << "*** Exit OK ***";
-    return labels;
-}
-
-const Json::Value& Energeasy::FindDevice(const string& deviceLabel)
-{
-    for(const Json::Value& deviceSetup : m_Setup["devices"])
-    {
-        if(deviceSetup["label"].asString() == deviceLabel) return deviceSetup;
-    }
-
-    return m_StaticEmptyValue;
-}
-
-string Energeasy::GetDevices()
-{
-    Json::StreamWriterBuilder wbuilder;
-
     LOG_DEBUG(m_Log) << "*** Enter ***";
     if(!RefreshSetup(false))
     {
@@ -233,63 +202,53 @@ string Energeasy::GetDevices()
         return "";
     }
 
+    string deviceLabel = "";
+
+    for(const Json::Value& deviceSetup : m_Setup["devices"])
+    {
+        if(deviceSetup["deviceURL"].asString() == deviceUrl)
+        {
+            deviceLabel = deviceSetup["label"].asString();
+            break;
+        }
+    }
+
     LOG_DEBUG(m_Log) << "*** Exit OK ***";
-    return Json::writeString(wbuilder, m_Setup["devices"]);
+    return deviceLabel;
 }
 
-/*
-string Energeasy::GetCommands(const string& deviceLabel)
+set<string> Energeasy::GetDevicesUrl()
+{
+    set<string> urls;
+
+    LOG_DEBUG(m_Log) << "*** Enter ***";
+    if(!RefreshSetup(false))
+    {
+        LOG_DEBUG(m_Log) << "*** Exit KO ***";
+        return urls;
+    }
+
+    for(const Json::Value& deviceSetup : m_Setup["devices"])
+    {
+        urls.insert(deviceSetup["deviceURL"].asString());
+    }
+
+    LOG_DEBUG(m_Log) << "*** Exit OK ***";
+    return urls;
+}
+
+Json::Value Energeasy::GetDevices()
 {
     LOG_DEBUG(m_Log) << "*** Enter ***";
-    if(!RefreshSetup())
+    if(!RefreshSetup(false))
     {
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
         return "";
     }
 
-    Json::Value device = FindDevice(deviceLabel);
-    if(device.empty())
-    {
-        LOG_INFO(m_Log) << "Device '" << deviceLabel << "' not found.";
-        LOG_DEBUG(m_Log) << "*** Exit OK ***";
-        return "";
-    }
-
-    Json::StreamWriterBuilder wbuilder;
-    Json::Value root;
-    root["commands"] = device["definition"]["commands"];
     LOG_DEBUG(m_Log) << "*** Exit OK ***";
-
-    return Json::writeString(wbuilder, root);
+    return m_Setup["devices"];
 }
-*/
-
-/*
-string Energeasy::GetStates(const string& deviceLabel)
-{
-    LOG_DEBUG(m_Log) << "*** Enter ***";
-    if(!RefreshSetup())
-    {
-        LOG_DEBUG(m_Log) << "*** Exit KO ***";
-        return "";
-    }
-
-    Json::Value device = FindDevice(deviceLabel);
-    if(device.empty())
-    {
-        LOG_INFO(m_Log) << "Device '" << deviceLabel << "' not found.";
-        LOG_DEBUG(m_Log) << "*** Exit OK ***";
-        return "";
-    }
-
-    Json::StreamWriterBuilder wbuilder;
-    Json::Value root;
-    root["states"] = device["states"];
-    LOG_DEBUG(m_Log) << "*** Exit OK ***";
-
-    return Json::writeString(wbuilder, root);
-}
-*/
 
 bool Energeasy::PollStart()
 {
@@ -378,11 +337,21 @@ Json::Value Energeasy::PollEvents()
     return root;
 }
 
-Json::Value Energeasy::GetStates(const string& deviceLabel)
+const Json::Value& Energeasy::FindCachedDevice(const string& deviceUrl)
+{
+    for(const Json::Value& deviceSetup : m_Setup["devices"])
+    {
+        if(deviceSetup["deviceURL"].asString() == deviceUrl) return deviceSetup;
+    }
+
+    return m_StaticEmptyValue;
+}
+
+Json::Value Energeasy::GetStates(const string& deviceUrl)
 {
     Json::Value root;
     LOG_DEBUG(m_Log) << "*** Enter ***";
-    LOG_VERBOSE(m_Log) << "Get states of "<< deviceLabel;
+    LOG_VERBOSE(m_Log) << "Get states of "<< deviceUrl;
 
     if(!RefreshSetup(false))
     {
@@ -390,24 +359,21 @@ Json::Value Energeasy::GetStates(const string& deviceLabel)
         return root;
     }
 
-    Json::Value device = FindDevice(deviceLabel);
-    if(device.empty())
-    {
-        LOG_INFO(m_Log) << "Device '" << deviceLabel << "' not found.";
-        LOG_DEBUG(m_Log) << "*** Exit KO ***";
-        return root;
-    }
-
     time_t timeNow = time((time_t*)0);
     if(timeNow-m_SetupRead<10)
     {
-        LOG_VERBOSE(m_Log) << "Return cached states";
-        LOG_DEBUG(m_Log) << "*** Exit OK ***";
-        return device["states"];
+        Json::Value device = FindCachedDevice(deviceUrl);
+        if(!device.empty())
+        {
+            LOG_VERBOSE(m_Log) << "Return cached states";
+            LOG_DEBUG(m_Log) << "*** Exit OK ***";
+            return device["states"];
+        }
     }
 
-    string deviceUrl = cpr::util::urlEncode(device["deviceURL"].asString());
-    cpr::Response rp = CprGet("/api/enduser-mobile-web/enduserAPI/setup/devices/"+deviceUrl+"/states");
+    //Oui, oui, j'encode deux fois
+    string encoded = cpr::util::urlEncode(cpr::util::urlEncode(deviceUrl));
+    cpr::Response rp = CprGet("/api/enduser-mobile-web/enduserAPI/setup/devices/"+encoded+"/states");
 
     if(!CheckResponse(rp))
     {
@@ -425,21 +391,13 @@ Json::Value Energeasy::GetStates(const string& deviceLabel)
     return root;
 }
 
-string Energeasy::SendCommand(const string& deviceLabel, const string& jsonCommand)
+string Energeasy::SendCommand(const string& deviceUrl, const string& jsonCommand)
 {
     LOG_DEBUG(m_Log) << "*** Enter ***";
 
     if(!RefreshSetup(false))
     {
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
-        return "";
-    }
-
-    Json::Value device = FindDevice(deviceLabel);
-    if(device.empty())
-    {
-        LOG_INFO(m_Log) << "Device '" << deviceLabel << "' not found.";
-        LOG_DEBUG(m_Log) << "*** Exit OK ***";
         return "";
     }
 
@@ -459,7 +417,7 @@ string Energeasy::SendCommand(const string& deviceLabel, const string& jsonComma
     commands.append(command);
 
     action["commands"] = commands;
-    action["deviceURL"] = device["deviceURL"];
+    action["deviceURL"] = deviceUrl;
     actions.append(action);
 
     body["label"] = "identification";

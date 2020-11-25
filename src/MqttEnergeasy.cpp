@@ -60,14 +60,21 @@ void MqttEnergeasy::DaemonConfigure(SimpleIni& iniFile)
 
 void MqttEnergeasy::MessageForDevice(const std::string& deviceLabel, const std::string& msg)
 {
+    string deviceUrl = m_Energeasy.GetDeviceUrlFromLabel(deviceLabel);
+    if(deviceUrl == "")
+    {
+        LOG_INFO(m_Log) << "No device url found for label " << deviceLabel;
+        return;
+    }
+
     if(msg=="REFRESH")
     {
-        Json::Value states = m_Energeasy.GetStates(deviceLabel);
+        Json::Value states = m_Energeasy.GetStates(deviceUrl);
         SendStates(deviceLabel, states);
         return;
     }
 
-	string execId = m_Energeasy.SendCommand(deviceLabel, msg);
+	string execId = m_Energeasy.SendCommand(deviceUrl, msg);
 	if(execId!="")
     {
         if(m_Energeasy.PollStart())
@@ -83,11 +90,12 @@ void MqttEnergeasy::MessageForService(const string& msg)
 {
 	if (msg == "GETDEVICES")
 	{
-        string value = m_Energeasy.GetDevices();
-        if(value != "")
+        Json::Value value = m_Energeasy.GetDevices();
+        if(!value.empty())
         {
+            Json::StreamWriterBuilder wbuilder;
             lock_guard<mutex> lock(m_MqttQueueAccess);
-            m_MqttQueue.emplace("DEVICES", value);
+            m_MqttQueue.emplace("DEVICES", Json::writeString(wbuilder, value));
         }
 	}
 	else
@@ -151,7 +159,7 @@ void MqttEnergeasy::SendEventsStates(const Json::Value& events)
     {
         if(!event.isMember("deviceURL")) continue;
         if(!event.isMember("deviceStates")) continue;
-        label = m_Energeasy.GetDeviceLabel(event["deviceURL"].asString());
+        label = m_Energeasy.GetDeviceLabelFromUrl(event["deviceURL"].asString());
         LOG_VERBOSE(m_Log) << "Found event states for " << label;
         if(label!="") SendStates(label, event["deviceStates"]);
     }
@@ -215,13 +223,15 @@ void MqttEnergeasy::GetStates()
 
 	LOG_ENTER;
 
-	set<string> labels = m_Energeasy.GetDevicesLabel();
-	for(const string& deviceLabel : labels)
+	string label;
+	set<string> urls = m_Energeasy.GetDevicesUrl();
+	for(const string& deviceUrl : urls)
     {
-        if(deviceLabel.find("#") != string::npos) continue;
-        if(deviceLabel.find("+") != string::npos) continue;
-        Json::Value states = m_Energeasy.GetStates(deviceLabel);
-        SendStates(deviceLabel, states);
+        label = m_Energeasy.GetDeviceLabelFromUrl(deviceUrl);
+        if(label.find("#") != string::npos) continue;
+        if(label.find("+") != string::npos) continue;
+        Json::Value states = m_Energeasy.GetStates(deviceUrl);
+        SendStates(label, states);
     }
 
   	LOG_EXIT_OK;
@@ -229,7 +239,6 @@ void MqttEnergeasy::GetStates()
 
 int MqttEnergeasy::DaemonLoop(int argc, char* argv[])
 {
-
 	LOG_ENTER;
 
 	Subscribe(GetMainTopic() + "command/#");
