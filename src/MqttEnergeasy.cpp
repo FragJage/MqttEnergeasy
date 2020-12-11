@@ -128,7 +128,7 @@ void MqttEnergeasy::on_message(const string& topic, const string& message)
     }
 
 	string device = topic.substr(mainTopic.length() + 8);
-	MessageForDevice(topic, device);
+	MessageForDevice(device, message);
 	return;
 }
 
