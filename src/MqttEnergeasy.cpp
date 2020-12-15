@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <thread>
 #include "StringTools.h"
 #include "MqttEnergeasy.h"
 #include "json/json.h"
@@ -96,6 +97,7 @@ void MqttEnergeasy::MessageForService(const string& msg)
             Json::StreamWriterBuilder wbuilder;
             lock_guard<mutex> lock(m_MqttQueueAccess);
             m_MqttQueue.emplace("DEVICES", Json::writeString(wbuilder, value));
+            m_MqttQueueCond.notify_one();
         }
 	}
 	else
@@ -123,12 +125,16 @@ void MqttEnergeasy::on_message(const string& topic, const string& message)
 
 	if (topic.length() == mainTopic.length() + 7)
     {
-        MessageForService(message);
+        thread t(&MqttEnergeasy::MessageForService, this, message);
+        t.detach();
+        //MessageForService(message);
         return;
     }
 
 	string device = topic.substr(mainTopic.length() + 8);
-	MessageForDevice(device, message);
+    thread t(&MqttEnergeasy::MessageForDevice, this, device, message);
+    t.detach();
+	//MessageForDevice(device, message);
 	return;
 }
 
@@ -136,6 +142,7 @@ void MqttEnergeasy::SendStates(const std::string& deviceLabel, const Json::Value
 {
     string name;
     size_t pos;
+    bool send = false;
 
     lock_guard<mutex> lock(m_MqttQueueAccess);
 
@@ -148,7 +155,9 @@ void MqttEnergeasy::SendStates(const std::string& deviceLabel, const Json::Value
         pos = name.find(":");
         if(pos != string::npos) name = name.substr(pos+1);
         m_MqttQueue.emplace(deviceLabel+"/"+name, state["value"].asString());
+        send = true;
     }
+    if(send) m_MqttQueueCond.notify_one();
 }
 
 void MqttEnergeasy::SendEventsStates(const Json::Value& events)

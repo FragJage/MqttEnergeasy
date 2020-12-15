@@ -57,6 +57,7 @@
 			<Add library="libpaho-mqtt3a" />
 			<Add library="libpaho-mqttpp3" />
 			<Add library="libcurl" />
+			<Add library="pthread" />
 			<Add directory="/usr/lib/x86_64-linux-gnu" />
 		</Linker>
 		<Unit filename="../../dependencies/FragFramework/src/Plateforms.cpp" />
