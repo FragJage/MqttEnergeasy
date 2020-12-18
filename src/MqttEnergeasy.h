@@ -7,13 +7,6 @@
 #include "MqttDaemon.h"
 #include "Energeasy.h"
 
-struct MqttQueue
-{
-	MqttQueue(std::string topic, std::string msg) : Topic(topic), Message(msg) {};
-	std::string Topic;
-	std::string Message;
-};
-
 class MqttEnergeasy : public MqttDaemon
 {
     public:
@@ -21,14 +14,16 @@ class MqttEnergeasy : public MqttDaemon
         ~MqttEnergeasy();
 
 		int DaemonLoop(int argc, char* argv[]);
-        void on_message(const std::string& topic, const std::string& message);
+        void IncomingMessage(const std::string& topic, const std::string& message);
 
     private:
         void MessageForService(const std::string& msg);
         void MessageForDevice(const std::string& device, const std::string& msg);
         void SendMqttMessages();
         void PollEvents();
+        void PollEventsThread();
         void GetStates();
+        void GetStatesThread();
         bool IsEndEvent(const Json::Value& root, const std::string& execId);
         void SendEventsStates(const Json::Value& root);
         void SendStates(const std::string& deviceLabel, const Json::Value& root);
@@ -36,14 +31,10 @@ class MqttEnergeasy : public MqttDaemon
 		void DaemonConfigure(SimpleIni& iniFile);
 		void ConfigureFormat(SimpleIni& iniFile);
 
-        bool m_bPause;
         Energeasy m_Energeasy;
         int m_StatesInterval;
 		int m_PollInterval;
 		int m_PollLoopCount;
 		std::string m_LastExecId;
-		std::mutex m_MqttQueueAccess;
-		ServiceConditionVariable m_MqttQueueCond;
-		std::queue<MqttQueue> m_MqttQueue;
 };
 #endif // MQTTENERGEASY_H

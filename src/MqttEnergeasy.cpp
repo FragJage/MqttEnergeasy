@@ -95,9 +95,8 @@ void MqttEnergeasy::MessageForService(const string& msg)
         if(!value.empty())
         {
             Json::StreamWriterBuilder wbuilder;
-            lock_guard<mutex> lock(m_MqttQueueAccess);
-            m_MqttQueue.emplace("DEVICES", Json::writeString(wbuilder, value));
-            m_MqttQueueCond.notify_one();
+            PublishAsyncAdd("DEVICES", Json::writeString(wbuilder, value));
+            PublishAsyncStart();
         }
 	}
 	else
@@ -106,7 +105,7 @@ void MqttEnergeasy::MessageForService(const string& msg)
 	}
 }
 
-void MqttEnergeasy::on_message(const string& topic, const string& message)
+void MqttEnergeasy::IncomingMessage(const string& topic, const string& message)
 {
 	LOG_VERBOSE(m_Log) << "Mqtt receive " << topic << " : " << message;
 
@@ -125,16 +124,12 @@ void MqttEnergeasy::on_message(const string& topic, const string& message)
 
 	if (topic.length() == mainTopic.length() + 7)
     {
-        thread t(&MqttEnergeasy::MessageForService, this, message);
-        t.detach();
-        //MessageForService(message);
+        MessageForService(message);
         return;
     }
 
 	string device = topic.substr(mainTopic.length() + 8);
-    thread t(&MqttEnergeasy::MessageForDevice, this, device, message);
-    t.detach();
-	//MessageForDevice(device, message);
+	MessageForDevice(device, message);
 	return;
 }
 
@@ -144,8 +139,6 @@ void MqttEnergeasy::SendStates(const std::string& deviceLabel, const Json::Value
     size_t pos;
     bool send = false;
 
-    lock_guard<mutex> lock(m_MqttQueueAccess);
-
     for(const Json::Value& state : states)
     {
         if(!state.isMember("name")) continue;
@@ -154,10 +147,10 @@ void MqttEnergeasy::SendStates(const std::string& deviceLabel, const Json::Value
         name = state["name"].asString();
         pos = name.find(":");
         if(pos != string::npos) name = name.substr(pos+1);
-        m_MqttQueue.emplace(deviceLabel+"/"+name, state["value"].asString());
+        PublishAsyncAdd(deviceLabel+"/"+name, state["value"].asString());
         send = true;
     }
-    if(send) m_MqttQueueCond.notify_one();
+    if(send) PublishAsyncStart();
 }
 
 void MqttEnergeasy::SendEventsStates(const Json::Value& events)
@@ -197,7 +190,22 @@ void MqttEnergeasy::PollEvents()
 	if(timeNow-lastPoll<m_PollInterval) return;
     lastPoll = timeNow;
 
+    thread t(&MqttEnergeasy::PollEventsThread, this);
+    t.detach();
+}
+
+void MqttEnergeasy::PollEventsThread()
+{
+    static bool alreadyLaunch = false;   //No mutex protection, 250ms minimum between two launchs
+
 	LOG_ENTER;
+	if(alreadyLaunch)
+    {
+        LOG_INFO(m_Log) << "Thread already launch";
+        return;
+    }
+    alreadyLaunch = true;
+
     Json::Value root = m_Energeasy.PollEvents();
    	LOG_TRACE(m_Log) << "Received events " << root;
     SendEventsStates(root);
@@ -205,20 +213,23 @@ void MqttEnergeasy::PollEvents()
     {
         LOG_VERBOSE(m_Log) << "Found end execution of " << m_LastExecId;
         m_LastExecId = "";
-        LOG_EXIT_OK;
-        return;
     }
-    m_PollLoopCount++;
-    if(m_PollLoopCount>29)
+    else
     {
-        m_PollInterval = 2;
-        LOG_VERBOSE(m_Log) << "Poll interval set to " << m_PollInterval << "s.";
+        m_PollLoopCount++;
+        if(m_PollLoopCount>29)
+        {
+            m_PollInterval = 2;
+            LOG_VERBOSE(m_Log) << "Poll interval set to " << m_PollInterval << "s.";
+        }
+        if(m_PollLoopCount>60)
+        {
+            m_LastExecId = "";
+            LOG_VERBOSE(m_Log) << "Forced stop polling !";
+        }
     }
-    if(m_PollLoopCount>60)
-    {
-        m_LastExecId = "";
-        LOG_VERBOSE(m_Log) << "Forced stop polling !";
-    }
+
+    alreadyLaunch = false;
   	LOG_EXIT_OK;
 }
 
@@ -230,7 +241,21 @@ void MqttEnergeasy::GetStates()
 	if(timeNow-lastPoll<m_StatesInterval) return;
     lastPoll = timeNow;
 
+    thread t(&MqttEnergeasy::GetStatesThread, this);
+    t.detach();
+}
+
+void MqttEnergeasy::GetStatesThread()
+{
+    static bool alreadyLaunch = false;   //No mutex protection, 250ms minimum between two launchs
+
 	LOG_ENTER;
+	if(alreadyLaunch)
+    {
+        LOG_INFO(m_Log) << "Thread already launch";
+        return;
+    }
+    alreadyLaunch = true;
 
 	string label;
 	set<string> urls = m_Energeasy.GetDevicesUrl();
@@ -243,6 +268,7 @@ void MqttEnergeasy::GetStates()
         SendStates(label, states);
     }
 
+    alreadyLaunch = false;
   	LOG_EXIT_OK;
 }
 
@@ -254,45 +280,16 @@ int MqttEnergeasy::DaemonLoop(int argc, char* argv[])
 	LOG_VERBOSE(m_Log) << "Subscript to : " << GetMainTopic() + "command/#";
 
 	bool bStop = false;
-	m_bPause = false;
 	while(!bStop)
     {
-		int cond = Service::Get()->WaitFor({ m_MqttQueueCond }, 250);
-		if (cond == Service::STATUS_CHANGED)
-		{
-			switch (Service::Get()->GetStatus())
-			{
-                case Service::StatusKind::PAUSE:
-                    m_bPause = true;
-                    break;
-                case Service::StatusKind::START:
-                    m_bPause = false;
-                    break;
-                case Service::StatusKind::STOP:
-                    bStop = true;
-                    break;
-			}
-		}
-		if (!m_bPause)
-		{
-		    if(m_LastExecId!="") PollEvents();
-		    GetStates();
-			SendMqttMessages();
-		}
+        if(WaitFor(250)==Service::STATUS_CHANGED)
+        {
+            if(Service::Get()->GetStatus() == Service::StatusKind::STOP) bStop = true;
+        }
+        if(m_LastExecId!="") PollEvents();
+        GetStates();
     }
 
 	LOG_EXIT_OK;
     return 0;
-}
-
-void MqttEnergeasy::SendMqttMessages()
-{
-	lock_guard<mutex> lock(m_MqttQueueAccess);
-	while (!m_MqttQueue.empty())
-	{
-		MqttQueue& mqttQueue = m_MqttQueue.front();
-		LOG_VERBOSE(m_Log) << "Send " << mqttQueue.Topic << " : " << mqttQueue.Message;
-		Publish(mqttQueue.Topic, mqttQueue.Message);
-		m_MqttQueue.pop();
-	}
 }
