@@ -23,6 +23,7 @@ void MqttEnergeasy::DaemonConfigure(SimpleIni& iniFile)
 	{
 		if ((*itSection) == "mqtt") continue;
 		if ((*itSection) == "log") continue;
+		if ((*itSection) == "mqttlog") continue;
 		if ((*itSection) == "energeasy")
         {
             string value;

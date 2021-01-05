@@ -16,6 +16,7 @@
 				<Compiler>
 					<Add option="-O2" />
 					<Add directory="src" />
+					<Add directory="./" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
@@ -33,6 +34,7 @@
 					<Add option="-g" />
 					<Add option="-DDEBUG" />
 					<Add directory="src" />
+					<Add directory="./" />
 				</Compiler>
 			</Target>
 		</Build>
@@ -68,6 +70,8 @@
 		<Unit filename="../../dependencies/MqttDaemon/src/MqttBase.h" />
 		<Unit filename="../../dependencies/MqttDaemon/src/MqttDaemon.cpp" />
 		<Unit filename="../../dependencies/MqttDaemon/src/MqttDaemon.h" />
+		<Unit filename="../../dependencies/MqttDaemon/src/MqttLogger.cpp" />
+		<Unit filename="../../dependencies/MqttDaemon/src/MqttLogger.h" />
 		<Unit filename="../../dependencies/ServiceSkeleton/src/Service.cpp" />
 		<Unit filename="../../dependencies/ServiceSkeleton/src/Service.h" />
 		<Unit filename="../../dependencies/SimpleFolder/src/SimpleFolders.cpp" />

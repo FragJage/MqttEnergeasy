@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <CodeBlocks_workspace_file>
-	<Workspace title="MqttEnergeasy">
-		<Project filename="MqttEnergeasy.cbp" />
-	</Workspace>
+	<Workspace title="MqttEnergeasy" />
 </CodeBlocks_workspace_file>
