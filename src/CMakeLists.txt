@@ -12,6 +12,20 @@ endif ()
 find_package(Threads)
 find_package(CURL REQUIRED) 
 
+find_library(LIBPAHO paho-mqtt3a REQUIRED)
+add_library(paho-mqtt3a SHARED IMPORTED)
+set_target_properties(paho-mqtt3a PROPERTIES
+  IMPORTED_LOCATION "${LIBPAHO}"
+)
+message(STATUS "Library paho-mqtt3a found in ${LIBPAHO}")
+
+find_library(LIBPAHOPP paho-mqttpp3 REQUIRED)
+add_library(paho-mqttpp3 SHARED IMPORTED)
+set_target_properties(paho-mqttpp3 PROPERTIES
+  IMPORTED_LOCATION "${LIBPAHOPP}"
+)
+message(STATUS "Library paho-mqttpp3 found in ${LIBPAHOPP}")
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -W -Wunused-variable -Wunused-parameter -Wunused-function -Wunused -Wno-system-headers -Wno-deprecated") # various warning flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s -O2") # no debug, active optimisation
 
@@ -106,5 +120,5 @@ target_link_libraries(MqttEnergeasy ${CMAKE_THREAD_LIBS_INIT})
 
 #Spécification WIN32
 if(WIN32)
-  target_link_libraries(MqttTeleInfo ws2_32)
+  target_link_libraries(MqttEnergeasy ws2_32)
 endif()
