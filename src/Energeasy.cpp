@@ -95,7 +95,7 @@ bool Energeasy::ParseResponse(const cpr::Response& rp, Json::Value* root)
     unique_ptr<Json::CharReader> const reader(jsonReaderBuilder.newCharReader());
     if (!reader->parse(rp.text.c_str(), rp.text.c_str() + rp.text.size(), root, &errorMsg))
     {
-        LOG_ERROR(m_Log) << "Failed to parse " << rp.text;
+        LOG_VERBOSE(m_Log) << "Failed to parse " << rp.text;
         LOG_ERROR(m_Log) << "Parse error : " << errorMsg;
         return false;
     }
@@ -409,7 +409,7 @@ string Energeasy::SendCommand(const string& deviceUrl, const string& jsonCommand
 
     if (!reader->parse(jsonCommand.c_str(), jsonCommand.c_str() + jsonCommand.size(), &command, &errorMsg))
     {
-        LOG_ERROR(m_Log) << "Failed to parse " << jsonCommand;
+        LOG_VERBOSE(m_Log) << "Failed to parse " << jsonCommand;
         LOG_ERROR(m_Log) << "Parse error : " << errorMsg;
         LOG_DEBUG(m_Log) << "*** Exit KO ***";
         return "";
